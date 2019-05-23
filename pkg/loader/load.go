@@ -45,6 +45,7 @@ var (
 	fNewBatchManager = newBatchManager
 )
 
+// ErrTableNotExist means the table not exist
 var ErrTableNotExist = errors.New("table not exist")
 
 // Loader is used to load data to mysql
