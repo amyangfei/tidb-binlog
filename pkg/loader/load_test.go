@@ -218,6 +218,20 @@ func (s *getTblInfoSuite) TestShouldCacheResult(c *check.C) {
 	c.Assert(nCalled, check.Equals, 1)
 }
 
+func (s *getTblInfoSuite) TestErrTableNotExist(c *check.C) {
+	origGet := utilGetTableInfo
+	utilGetTableInfo = func(db *sql.DB, schema string, table string) (info *tableInfo, err error) {
+		return &tableInfo{columns: nil}, nil
+	}
+	defer func() {
+		utilGetTableInfo = origGet
+	}()
+	ld := loaderImpl{}
+
+	_, err := ld.getTableInfo("test", "not_exist")
+	c.Assert(err, check.Equals, ErrTableNotExist)
+}
+
 type isCreateDBDDLSuite struct{}
 
 var _ = check.Suite(&isCreateDBDDLSuite{})
@@ -234,23 +248,6 @@ func (s *isCreateDBDDLSuite) TestNonCreateDBSQL(c *check.C) {
 func (s *isCreateDBDDLSuite) TestCreateDBSQL(c *check.C) {
 	c.Assert(isCreateDatabaseDDL("CREATE DATABASE test;"), check.IsTrue)
 	c.Assert(isCreateDatabaseDDL("create database `db2`;"), check.IsTrue)
-}
-
-type needRefreshTableInfoSuite struct{}
-
-var _ = check.Suite(&needRefreshTableInfoSuite{})
-
-func (s *needRefreshTableInfoSuite) TestNeedRefreshTableInfo(c *check.C) {
-	cases := map[string]bool{
-		"DROP TABLE a":           false,
-		"DROP DATABASE a":        false,
-		"TRUNCATE TABLE a":       false,
-		"CREATE TABLE a(id int)": true,
-	}
-
-	for sql, res := range cases {
-		c.Assert(needRefreshTableInfo(sql), check.Equals, res)
-	}
 }
 
 type execDDLSuite struct{}

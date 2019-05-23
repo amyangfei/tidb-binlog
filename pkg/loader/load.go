@@ -45,6 +45,8 @@ var (
 	fNewBatchManager = newBatchManager
 )
 
+var ErrTableNotExist = errors.New("table not exist")
+
 // Loader is used to load data to mysql
 type Loader interface {
 	SetSafeMode(bool)
@@ -210,6 +212,10 @@ func (s *loaderImpl) refreshTableInfo(schema string, table string) (info *tableI
 		return info, errors.Trace(err)
 	}
 
+	if len(info.columns) == 0 {
+		return nil, ErrTableNotExist
+	}
+
 	if len(info.uniqueKeys) == 0 {
 		log.Warn("table has no any primary key and unique index, it may be slow when syncing data to downstream, we highly recommend add primary key or unique key for table", zap.String("table", quoteSchema(schema, table)))
 	}
@@ -227,25 +233,6 @@ func (s *loaderImpl) getTableInfo(schema string, table string) (info *tableInfo,
 	}
 
 	return s.refreshTableInfo(schema, table)
-}
-
-func needRefreshTableInfo(sql string) bool {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
-	if err != nil {
-		log.Error("parse sql failed", zap.String("sql", sql), zap.Error(err))
-		return false
-	}
-
-	switch stmt.(type) {
-	case *ast.DropTableStmt:
-		return false
-	case *ast.DropDatabaseStmt:
-		return false
-	case *ast.TruncateTableStmt:
-		return false
-	}
-
-	return true
 }
 
 func isCreateDatabaseDDL(sql string) bool {
@@ -502,9 +489,7 @@ func newBatchManager(s *loaderImpl) *batchManager {
 		fExecDDL:             s.execDDL,
 		fDDLSuccessCallback: func(txn *Txn) {
 			s.markSuccess(txn)
-			if needRefreshTableInfo(txn.DDL.SQL) {
-				s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table)
-			}
+			s.refreshTableInfo(txn.DDL.Database, txn.DDL.Table)
 		},
 	}
 }
